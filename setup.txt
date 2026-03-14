@@ -1,0 +1,8 @@
+1. created a nextjs app with page router 
+   pnpm create next-app@latest .
+
+2. Need to get data of states and Constituencies
+   Source Wikipedia
+
+3. For DB Supabase
+   pnpm add @supabase/supabase-js
