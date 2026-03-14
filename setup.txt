@@ -6,3 +6,111 @@
 
 3. For DB Supabase
    pnpm add @supabase/supabase-js
+
+-- ============================================
+-- SUPABASE SQL SCHEMA
+-- ============================================
+
+-- 1. Profiles table (extends auth.users)
+CREATE TABLE public.profiles (
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+  email TEXT NOT NULL,
+  full_name TEXT,
+  role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Tickets table
+CREATE TABLE public.tickets (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  state_id TEXT NOT NULL,
+  state_name TEXT NOT NULL,
+  constituency TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved')),
+  upvotes INTEGER DEFAULT 0,
+  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_email TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Upvotes table (to prevent double upvoting)
+CREATE TABLE public.upvotes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  ticket_id UUID REFERENCES public.tickets(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(ticket_id, user_id)
+);
+
+-- ============================================
+-- ROW LEVEL SECURITY
+-- ============================================
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.upvotes ENABLE ROW LEVEL SECURITY;
+
+-- Profiles: users can read all, update only own
+CREATE POLICY "Profiles are viewable by everyone" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Users can update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users can insert own profile" ON public.profiles FOR INSERT WITH CHECK (auth.uid() = id);
+
+-- Tickets: everyone can read, authenticated users can create, admins can update
+CREATE POLICY "Tickets are viewable by everyone" ON public.tickets FOR SELECT USING (true);
+CREATE POLICY "Authenticated users can create tickets" ON public.tickets FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Admins can update tickets" ON public.tickets FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+);
+
+-- Upvotes: authenticated users can manage own upvotes
+CREATE POLICY "Users can view all upvotes" ON public.upvotes FOR SELECT USING (true);
+CREATE POLICY "Authenticated users can insert upvotes" ON public.upvotes FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete own upvotes" ON public.upvotes FOR DELETE USING (auth.uid() = user_id);
+
+-- ============================================
+-- FUNCTIONS & TRIGGERS
+-- ============================================
+
+-- Auto-create profile on signup
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, role)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'user')
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Update upvote count on ticket
+CREATE OR REPLACE FUNCTION public.update_upvote_count()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE public.tickets SET upvotes = upvotes + 1 WHERE id = NEW.ticket_id;
+  ELSIF TG_OP = 'DELETE' THEN
+    UPDATE public.tickets SET upvotes = upvotes - 1 WHERE id = OLD.ticket_id;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_upvote_change
+  AFTER INSERT OR DELETE ON public.upvotes
+  FOR EACH ROW EXECUTE FUNCTION public.update_upvote_count();
+
+-- ============================================
+-- SEED ADMIN USER (run after creating admin in Auth)
+-- ============================================
+UPDATE public.profiles SET role = 'admin' WHERE email = 'amishpratapsingh13@gmail.com';

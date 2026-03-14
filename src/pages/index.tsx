@@ -77,8 +77,8 @@ export default function Home() {
             JanConnect
           </h1>
           <p className="text-gray-500 max-w-xl mx-auto text-sm sm:text-base">
-            Report civic issues in your constituency. Click on any state to
-            explore and upvote tickets.
+            Report issues in your constituency. Click on any state to explore
+            and upvote tickets.
           </p>
           <div className="flex gap-3 justify-center mt-6">
             <a
