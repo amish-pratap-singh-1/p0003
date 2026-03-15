@@ -23,6 +23,9 @@ export default function Dashboard() {
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   const fetchTickets = useCallback(async () => {
     const { data } = await supabase
       .from("tickets")
@@ -80,6 +83,14 @@ export default function Dashboard() {
     init();
   }, []);
 
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setCurrentPage(1);
+    }, 0);
+
+    return () => clearTimeout(timeout);
+  }, [selectedState, statusFilter]);
+
   const handleRefresh = () => {
     if (profile) {
       fetchTickets();
@@ -102,6 +113,11 @@ export default function Dashboard() {
       </div>
     );
   const formattedData = convertStateData(stateCounts);
+  const paginatedTickets = filteredTickets.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage,
+  );
+  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -214,18 +230,45 @@ export default function Dashboard() {
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {filteredTickets.map((ticket) => (
-                  <TicketCard
-                    key={ticket.id}
-                    ticket={ticket}
-                    userUpvoted={userUpvotes.has(ticket.id)}
-                    currentUserId={profile?.id}
-                    isAdmin={false}
-                    onUpdate={handleRefresh}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="space-y-3">
+                  {paginatedTickets.map((ticket) => (
+                    <TicketCard
+                      key={ticket.id}
+                      ticket={ticket}
+                      userUpvoted={userUpvotes.has(ticket.id)}
+                      currentUserId={profile?.id}
+                      isAdmin={false}
+                      onUpdate={handleRefresh}
+                    />
+                  ))}
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-2 mt-4">
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(prev - 1, 1))
+                      }
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
+                    >
+                      Prev
+                    </button>
+                    <span className="text-sm">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                      }
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
