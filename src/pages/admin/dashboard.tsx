@@ -1,7 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/router";
-
-import IndiaMap from "../../components/IndiaMap";
 import TicketCard from "../../components/TicketCard";
 import { Profile, supabase, Ticket } from "@/libs/supabaseclient";
 import Navbar from "@/components/ Navbar";
@@ -13,35 +11,106 @@ interface StateCount {
   count: number;
 }
 
+const ITEMS_PER_PAGE = 10;
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [totalTickets, setTotalTickets] = useState(0);
+  const [userUpvotes, setUserUpvotes] = useState<Set<string>>(new Set());
   const [stateCounts, setStateCounts] = useState<StateCount[]>([]);
+  const [statusTotals, setStatusTotals] = useState({
+    all: 0,
+    open: 0,
+    in_progress: 0,
+    resolved: 0,
+  });
   const [selectedState, setSelectedState] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
-  const fetchTickets = useCallback(async () => {
-    const { data } = await supabase
-      .from("tickets")
-      .select("*")
-      .order("created_at", { ascending: false });
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const fetchStateCounts = useCallback(async () => {
+    const { data } = await supabase.from("tickets").select("state_id");
     if (data) {
-      setTickets(data);
       const counts: Record<string, number> = {};
-      data.forEach((t: Ticket) => {
+      data.forEach((t: { state_id: string }) => {
         counts[t.state_id] = (counts[t.state_id] || 0) + 1;
       });
       setStateCounts(
-        Object.entries(counts).map(([stateId, count]) => ({
-          stateId,
-          count,
-        })),
+        Object.entries(counts).map(([stateId, count]) => ({ stateId, count })),
       );
     }
   }, []);
+
+  const fetchStatusTotals = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const { data } = await supabase.from("tickets").select("status");
+      if (data) {
+        const totals = {
+          all: data.length,
+          open: 0,
+          in_progress: 0,
+          resolved: 0,
+        };
+        data.forEach((t: { status: string }) => {
+          if (t.status in totals) totals[t.status as keyof typeof totals]++;
+        });
+        setStatusTotals(totals);
+      }
+    } finally {
+      setStatsLoading(false);
+    }
+  }, []);
+
+  const fetchUpvotes = useCallback(async (userId: string) => {
+    const { data } = await supabase
+      .from("upvotes")
+      .select("ticket_id")
+      .eq("user_id", userId);
+    if (data) setUserUpvotes(new Set(data.map((u: any) => u.ticket_id)));
+  }, []);
+
+  const fetchTickets = useCallback(
+    async (page: number, stateId: string, status: string, search: string) => {
+      setTicketsLoading(true);
+      try {
+        const from = (page - 1) * ITEMS_PER_PAGE;
+        const to = from + ITEMS_PER_PAGE - 1;
+
+        let query = supabase
+          .from("tickets")
+          .select("*", { count: "exact" })
+          .order("upvotes", { ascending: false })
+          .range(from, to);
+
+        if (stateId) query = query.eq("state_id", stateId);
+        if (status !== "all") query = query.eq("status", status);
+        if (search)
+          query = query.or(
+            `title.ilike.%${search}%,description.ilike.%${search}%,constituency.ilike.%${search}%`,
+          );
+
+        const { data, count } = await query;
+        if (data) setTickets(data);
+        if (count !== null) setTotalTickets(count);
+      } finally {
+        setTicketsLoading(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const init = async () => {
@@ -62,22 +131,36 @@ export default function AdminDashboard() {
         return;
       }
       setProfile(p);
-      await fetchTickets();
+      await Promise.all([
+        fetchTickets(1, "", "all", ""),
+        fetchStateCounts(),
+        fetchStatusTotals(),
+        fetchUpvotes(user.id),
+      ]);
       setLoading(false);
     };
     init();
   }, []);
 
-  const filteredTickets = tickets.filter((t) => {
-    const stateMatch = !selectedState || t.state_id === selectedState;
-    const statusMatch = statusFilter === "all" || t.status === statusFilter;
-    const searchMatch =
-      !searchQuery ||
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.constituency.toLowerCase().includes(searchQuery.toLowerCase());
-    return stateMatch && statusMatch && searchMatch;
-  });
+  useEffect(() => {
+    if (!loading) {
+      fetchTickets(currentPage, selectedState, statusFilter, debouncedSearch);
+    }
+  }, [currentPage, selectedState, statusFilter, debouncedSearch]);
+
+  useEffect(() => {
+    if (!loading) setCurrentPage(1);
+  }, [selectedState, statusFilter, debouncedSearch]);
+
+  const handleRefresh = () => {
+    fetchTickets(currentPage, selectedState, statusFilter, debouncedSearch);
+    fetchStateCounts();
+    fetchStatusTotals();
+    if (profile) fetchUpvotes(profile.id);
+  };
+
+  const totalPages = Math.ceil(totalTickets / ITEMS_PER_PAGE);
+  const formattedData = convertStateData(stateCounts);
 
   if (loading)
     return (
@@ -88,14 +171,11 @@ export default function AdminDashboard() {
       </div>
     );
 
-  const formattedData = convertStateData(stateCounts);
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar profile={profile} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -112,38 +192,44 @@ export default function AdminDashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            {
-              label: "Total",
-              count: tickets.length,
-              filter: "all",
-              color: "bg-gray-100 text-gray-700",
-            },
-            {
-              label: "Open",
-              count: tickets.filter((t) => t.status === "open").length,
-              filter: "open",
-              color: "bg-yellow-50 text-yellow-700",
-            },
-            {
-              label: "In Progress",
-              count: tickets.filter((t) => t.status === "in_progress").length,
-              filter: "in_progress",
-              color: "bg-blue-50 text-blue-700",
-            },
-            {
-              label: "Resolved",
-              count: tickets.filter((t) => t.status === "resolved").length,
-              filter: "resolved",
-              color: "bg-green-50 text-green-700",
-            },
-          ].map(({ label, count, filter, color }) => (
+          {(
+            [
+              {
+                label: "Total",
+                key: "all",
+                color: "bg-gray-100 text-gray-700",
+              },
+              {
+                label: "Open",
+                key: "open",
+                color: "bg-yellow-50 text-yellow-700",
+              },
+              {
+                label: "In Progress",
+                key: "in_progress",
+                color: "bg-blue-50 text-blue-700",
+              },
+              {
+                label: "Resolved",
+                key: "resolved",
+                color: "bg-green-50 text-green-700",
+              },
+            ] as const
+          ).map(({ label, key, color }) => (
             <button
-              key={label}
-              onClick={() => setStatusFilter(filter)}
-              className={`rounded-xl p-3 text-left transition-all ${color} ${statusFilter === filter ? "ring-2 ring-offset-1 ring-current" : "border border-transparent hover:border-current hover:border-opacity-30"}`}
+              key={key}
+              onClick={() => setStatusFilter(key)}
+              className={`rounded-xl p-3 text-left transition-all ${color} ${
+                statusFilter === key
+                  ? "ring-2 ring-offset-1 ring-current"
+                  : "border border-transparent hover:border-current hover:border-opacity-30"
+              }`}
             >
-              <div className="text-2xl font-bold">{count}</div>
+              {statsLoading ? (
+                <div className="h-8 w-12 rounded bg-current opacity-10 animate-pulse mb-1" />
+              ) : (
+                <div className="text-2xl font-bold">{statusTotals[key]}</div>
+              )}
               <div className="text-xs opacity-70">{label}</div>
             </button>
           ))}
@@ -185,14 +271,37 @@ export default function AdminDashboard() {
 
           {/* Right: Tickets */}
           <div className="flex-1 min-w-0">
-            {/* Search + Filter */}
             <div className="flex gap-2 mb-4">
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search tickets..."
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-              />
+              <div className="relative flex-1">
+                <input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search tickets..."
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 pr-8"
+                />
+                {searchQuery && searchQuery !== debouncedSearch && (
+                  <svg
+                    className="animate-spin h-3.5 w-3.5 text-purple-400 absolute right-2.5 top-2.5"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                )}
+              </div>
               <select
                 value={selectedState}
                 onChange={(e) => setSelectedState(e.target.value)}
@@ -210,14 +319,80 @@ export default function AdminDashboard() {
             </div>
 
             <div className="flex items-center justify-between mb-3">
-              <p className="text-sm text-gray-600">
-                {filteredTickets.length} ticket
-                {filteredTickets.length !== 1 ? "s" : ""}
-                {selectedState && ` in ${INDIA_STATES[selectedState]?.name}`}
+              <p className="text-sm text-gray-600 flex items-center gap-2">
+                {ticketsLoading ? (
+                  <>
+                    <svg
+                      className="animate-spin h-3.5 w-3.5 text-purple-500"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                    <span className="text-gray-400">Loading tickets...</span>
+                  </>
+                ) : (
+                  <span>
+                    {totalTickets} ticket{totalTickets !== 1 ? "s" : ""}
+                    {statusFilter !== "all" && (
+                      <span className="text-gray-400">
+                        {" "}
+                        ·{" "}
+                        {statusFilter === "in_progress"
+                          ? "in progress"
+                          : statusFilter}
+                      </span>
+                    )}
+                    {selectedState && (
+                      <span className="text-gray-400">
+                        {" "}
+                        in {INDIA_STATES[selectedState]?.name}
+                      </span>
+                    )}
+                    {debouncedSearch && (
+                      <span className="text-gray-400">
+                        {" "}
+                        matching "{debouncedSearch}"
+                      </span>
+                    )}
+                  </span>
+                )}
               </p>
             </div>
 
-            {filteredTickets.length === 0 ? (
+            {ticketsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="bg-white rounded-2xl border p-4 animate-pulse"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-200 rounded w-3/4" />
+                        <div className="h-3 bg-gray-100 rounded w-1/2" />
+                      </div>
+                      <div className="h-6 w-16 bg-gray-100 rounded-full" />
+                    </div>
+                    <div className="mt-3 h-3 bg-gray-100 rounded w-full" />
+                    <div className="mt-1.5 h-3 bg-gray-100 rounded w-5/6" />
+                  </div>
+                ))}
+              </div>
+            ) : tickets.length === 0 ? (
               <div className="bg-white rounded-2xl border p-12 text-center">
                 <div className="text-4xl mb-3">✅</div>
                 <p className="text-gray-500 text-sm">
@@ -225,18 +400,45 @@ export default function AdminDashboard() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {filteredTickets.map((ticket) => (
-                  <TicketCard
-                    key={ticket.id}
-                    ticket={ticket}
-                    userUpvoted={false}
-                    currentUserId={profile?.id}
-                    isAdmin={true}
-                    onUpdate={fetchTickets}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="space-y-3">
+                  {tickets.map((ticket) => (
+                    <TicketCard
+                      key={ticket.id}
+                      ticket={ticket}
+                      userUpvoted={userUpvotes.has(ticket.id)}
+                      currentUserId={profile?.id}
+                      isAdmin={true}
+                      onUpdate={handleRefresh}
+                    />
+                  ))}
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex justify-center items-center gap-2 mt-6">
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.max(prev - 1, 1))
+                      }
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
+                    >
+                      Prev
+                    </button>
+                    <span className="text-sm text-gray-500">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                      }
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
