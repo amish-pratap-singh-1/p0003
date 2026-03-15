@@ -664,6 +664,10 @@ export const INDIA_STATES: Record<
       "Ladakh",
     ],
   },
+  AN: {
+    name: "Andaman & Nicobar",
+    constituencies: ["Andaman and Nicobar Islands"],
+  },
 };
 
 export const STATE_COORDINATES: Record<string, [number, number]> = {

@@ -255,9 +255,11 @@ export default function AdminDashboard() {
               }`}
             >
               {statsLoading ? (
-                <div className="h-8 w-12 rounded bg-current opacity-10 animate-pulse mb-1" />
+                <div className="h-7 w-12 rounded bg-current opacity-10 animate-pulse" />
               ) : (
-                <div className="text-2xl font-bold">{statusTotals[key]}</div>
+                <div className="text-2xl h-7 font-bold">
+                  {statusTotals[key]}
+                </div>
               )}
               <div className="text-xs opacity-70">{label}</div>
             </button>
