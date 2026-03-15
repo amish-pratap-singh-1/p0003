@@ -2,11 +2,16 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import { supabase, Ticket, Profile } from "@/libs/supabaseclient";
-import { INDIA_STATES } from "@/data/india";
+import {
+  convertConstituencyData,
+  getStateNameFromId,
+  INDIA_STATES,
+} from "@/data/india";
 import ConstituencyHeatmap from "../../components/ConstituencyHeatmap";
 import TicketCard from "../../components/TicketCard";
 import CreateTicketModal from "../../components/CreateTicketModal";
 import Navbar from "@/components/ Navbar";
+import IndiaConstMap from "@/components/IndiaConstMap";
 
 export default function StatePage() {
   const router = useRouter();
@@ -74,14 +79,14 @@ export default function StatePage() {
       name,
       count: tickets.filter((t) => t.constituency === name).length,
     })) || [];
-
+  console.log(constituencyData);
   const filteredTickets = tickets.filter((t) => {
     const cMatch =
       !selectedConstituency || t.constituency === selectedConstituency;
     const sMatch = statusFilter === "all" || t.status === statusFilter;
     return cMatch && sMatch;
   });
-
+  console.log(constituencyData, "--hello");
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -139,6 +144,12 @@ export default function StatePage() {
               + New Ticket
             </button>
           )}
+        </div>
+        <div>
+          <IndiaConstMap
+            data={convertConstituencyData(constituencyData)}
+            stateName={getStateNameFromId(stateId) || "MP"}
+          />
         </div>
 
         {/* Constituency Heatmap */}

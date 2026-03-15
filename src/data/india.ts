@@ -23,7 +23,7 @@ export const INDIA_STATES: Record<
       "Ongole",
       "Nandyal",
       "Kurnool",
-      "Anantapur",
+      "Anantapuramu",
       "Hindupur",
       "Kadapa",
       "Nellore",
@@ -276,7 +276,7 @@ export const INDIA_STATES: Record<
       "Rajgarh",
       "Dewas",
       "Ujjain",
-      "Mandsour",
+      "Mandsaur",
       "Ratlam",
       "Dhar",
       "Indore",
@@ -656,7 +656,7 @@ export const INDIA_STATES: Record<
     constituencies: [
       "Baramulla",
       "Srinagar",
-      "Anantnag-Rajouri",
+      "Anantnag",
       "Udhampur",
       "Jammu",
       "Ladakh",
@@ -701,11 +701,28 @@ export const STATE_NAME_TO_ID = Object.fromEntries(
   Object.entries(INDIA_STATES).map(([id, v]) => [v.name, id]),
 );
 
+export const STATE_ID_TO_NAME: Record<string, string> = Object.fromEntries(
+  Object.entries(STATE_NAME_TO_ID).map(([name, id]) => [id, name]),
+);
+
 export const convertStateData = (
   input: { stateId: string; count: number }[],
 ): { st_name: string; value: number }[] => {
   return input.map((item) => ({
     st_name: INDIA_STATES[item.stateId]?.name || item.stateId,
+    value: item.count,
+  }));
+};
+
+export function getStateNameFromId(stateId: string): string | undefined {
+  return STATE_ID_TO_NAME[stateId];
+}
+
+export const convertConstituencyData = (
+  input: { name: string; count: number }[],
+): { pc_name: string; value: number }[] => {
+  return input.map((item) => ({
+    pc_name: item.name,
     value: item.count,
   }));
 };
