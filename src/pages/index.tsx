@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { Profile, supabase } from "@/libs/supabaseclient";
 import Navbar from "@/components/ Navbar";
 import IndiaMap from "@/components/IndiaMap";
+import IndiaStateMap from "@/components/IndiaStateMap";
 
 interface StateCount {
   stateId: string;
@@ -134,6 +135,13 @@ export default function Home() {
           <div className="flex justify-center">
             <IndiaMap stateData={stateCounts} />
           </div>
+          <IndiaStateMap
+            data={[
+              { st_name: "Maharashtra", value: 500 },
+              { st_name: "Gujarat", value: 300 },
+              { st_name: "Rajasthan", value: 450 },
+            ]}
+          />
         </div>
       </main>
     </div>
