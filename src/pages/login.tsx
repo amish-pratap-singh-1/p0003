@@ -24,6 +24,22 @@ export default function Login() {
       setError("Please fill in all fields.");
       return;
     }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    if (isSignup && !name) {
+      setError("Please enter your full name.");
+      return;
+    }
     setLoading(true);
     setError("");
 
@@ -90,7 +106,7 @@ export default function Login() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">
             {isSignup
-              ? "Join to report and track civic issues"
+              ? "Join to report and track issues"
               : "Sign in to continue"}
           </p>
         </div>
