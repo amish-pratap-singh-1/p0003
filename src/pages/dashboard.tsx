@@ -12,39 +12,76 @@ interface StateCount {
   count: number;
 }
 
+const ITEMS_PER_PAGE = 10;
+
 export default function Dashboard() {
   const router = useRouter();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [totalTickets, setTotalTickets] = useState(0);
   const [userUpvotes, setUserUpvotes] = useState<Set<string>>(new Set());
   const [stateCounts, setStateCounts] = useState<StateCount[]>([]);
+  const [statusTotals, setStatusTotals] = useState({
+    all: 0,
+    open: 0,
+    in_progress: 0,
+    resolved: 0,
+  });
   const [selectedState, setSelectedState] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
-
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
 
-  const fetchTickets = useCallback(async () => {
-    const { data } = await supabase
-      .from("tickets")
-      .select("*")
-      .order("upvotes", { ascending: false });
+  // Fetch per-state ticket counts for the map (always global, no filters)
+  const fetchStateCounts = useCallback(async () => {
+    const { data } = await supabase.from("tickets").select("state_id");
     if (data) {
-      setTickets(data);
       const counts: Record<string, number> = {};
-      data.forEach((t: Ticket) => {
+      data.forEach((t: { state_id: string }) => {
         counts[t.state_id] = (counts[t.state_id] || 0) + 1;
       });
       setStateCounts(
-        Object.entries(counts).map(([stateId, count]) => ({
-          stateId,
-          count,
-        })),
+        Object.entries(counts).map(([stateId, count]) => ({ stateId, count })),
       );
     }
   }, []);
+
+  // Fetch status summary counts (respects state filter but not status filter)
+  const fetchStatusTotals = useCallback(async (stateId: string) => {
+    let query = supabase.from("tickets").select("status");
+    if (stateId) query = query.eq("state_id", stateId);
+    const { data } = await query;
+    if (data) {
+      const totals = { all: data.length, open: 0, in_progress: 0, resolved: 0 };
+      data.forEach((t: { status: string }) => {
+        if (t.status in totals) totals[t.status as keyof typeof totals]++;
+      });
+      setStatusTotals(totals);
+    }
+  }, []);
+
+  // Fetch paginated + filtered tickets from DB
+  const fetchTickets = useCallback(
+    async (page: number, stateId: string, status: string) => {
+      const from = (page - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+
+      let query = supabase
+        .from("tickets")
+        .select("*", { count: "exact" })
+        .order("upvotes", { ascending: false })
+        .range(from, to);
+
+      if (stateId) query = query.eq("state_id", stateId);
+      if (status !== "all") query = query.eq("status", status);
+
+      const { data, count } = await query;
+      if (data) setTickets(data);
+      if (count !== null) setTotalTickets(count);
+    },
+    [],
+  );
 
   const fetchUpvotes = useCallback(async (userId: string) => {
     const { data } = await supabase
@@ -54,6 +91,7 @@ export default function Dashboard() {
     if (data) setUserUpvotes(new Set(data.map((u: any) => u.ticket_id)));
   }, []);
 
+  // Initial auth + data load
   useEffect(() => {
     const init = async () => {
       const {
@@ -63,6 +101,7 @@ export default function Dashboard() {
         router.push("/login");
         return;
       }
+
       const { data: p } = await supabase
         .from("profiles")
         .select("*")
@@ -76,33 +115,44 @@ export default function Dashboard() {
         router.push("/admin/dashboard");
         return;
       }
+
       setProfile(p);
-      await Promise.all([fetchTickets(), fetchUpvotes(user.id)]);
+      await Promise.all([
+        fetchTickets(1, "", "all"),
+        fetchStateCounts(),
+        fetchStatusTotals(""),
+        fetchUpvotes(user.id),
+      ]);
       setLoading(false);
     };
     init();
   }, []);
 
+  // Re-fetch when filters or page change
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      setCurrentPage(1);
-    }, 0);
+    if (!loading) {
+      fetchTickets(currentPage, selectedState, statusFilter);
+    }
+  }, [currentPage, selectedState, statusFilter]);
 
-    return () => clearTimeout(timeout);
+  // Reset to page 1 and refresh status totals when state/status filter changes
+  useEffect(() => {
+    if (!loading) {
+      setCurrentPage(1);
+      fetchStatusTotals(selectedState);
+    }
   }, [selectedState, statusFilter]);
 
   const handleRefresh = () => {
     if (profile) {
-      fetchTickets();
+      fetchTickets(currentPage, selectedState, statusFilter);
+      fetchStateCounts();
+      fetchStatusTotals(selectedState);
       fetchUpvotes(profile.id);
     }
   };
 
-  const filteredTickets = tickets.filter((t) => {
-    const stateMatch = !selectedState || t.state_id === selectedState;
-    const statusMatch = statusFilter === "all" || t.status === statusFilter;
-    return stateMatch && statusMatch;
-  });
+  const totalPages = Math.ceil(totalTickets / ITEMS_PER_PAGE);
 
   if (loading)
     return (
@@ -112,12 +162,8 @@ export default function Dashboard() {
         </div>
       </div>
     );
+
   const formattedData = convertStateData(stateCounts);
-  const paginatedTickets = filteredTickets.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage,
-  );
-  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -144,45 +190,45 @@ export default function Dashboard() {
 
         {/* Stats Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            {
-              label: "Total",
-              count: tickets.length,
-              filter: "all",
-              color: "bg-blue-50 text-blue-700 border-blue-100",
-            },
-            {
-              label: "Open",
-              count: tickets.filter((t) => t.status === "open").length,
-              filter: "open",
-              color: "bg-yellow-50 text-yellow-700 border-yellow-100",
-            },
-            {
-              label: "In Progress",
-              count: tickets.filter((t) => t.status === "in_progress").length,
-              filter: "in_progress",
-              color: "bg-blue-50 text-blue-700 border-blue-100",
-            },
-            {
-              label: "Resolved",
-              count: tickets.filter((t) => t.status === "resolved").length,
-              filter: "resolved",
-              color: "bg-green-50 text-green-700 border-green-100",
-            },
-          ].map(({ label, count, filter, color }) => (
+          {(
+            [
+              {
+                label: "Total",
+                key: "all",
+                color: "bg-blue-50 text-blue-700 border-blue-100",
+              },
+              {
+                label: "Open",
+                key: "open",
+                color: "bg-yellow-50 text-yellow-700 border-yellow-100",
+              },
+              {
+                label: "In Progress",
+                key: "in_progress",
+                color: "bg-blue-50 text-blue-700 border-blue-100",
+              },
+              {
+                label: "Resolved",
+                key: "resolved",
+                color: "bg-green-50 text-green-700 border-green-100",
+              },
+            ] as const
+          ).map(({ label, key, color }) => (
             <button
-              key={label}
-              onClick={() => setStatusFilter(filter)}
-              className={`rounded-xl border p-3 text-left transition-all ${color} ${statusFilter === filter ? "ring-2 ring-offset-1 ring-current" : ""}`}
+              key={key}
+              onClick={() => setStatusFilter(key)}
+              className={`rounded-xl border p-3 text-left transition-all ${color} ${
+                statusFilter === key ? "ring-2 ring-offset-1 ring-current" : ""
+              }`}
             >
-              <div className="text-xl font-bold">{count}</div>
+              <div className="text-xl font-bold">{statusTotals[key]}</div>
               <div className="text-xs opacity-70">{label}</div>
             </button>
           ))}
         </div>
 
-        <div className="flex flex-col lg:flex-row  gap-6">
-          <div className=" w-full  lg:w-110 flex-shrink-0">
+        <div className="flex flex-col lg:flex-row gap-6">
+          <div className="w-full lg:w-110 flex-shrink-0">
             <div className="bg-white rounded-2xl border p-4 sticky top-20">
               <h2 className="font-semibold text-gray-900 text-sm mb-3">
                 Click a state to see its tickets
@@ -192,8 +238,9 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
           <div className="flex-1 min-w-0">
-            <div className=" mb-4 flex gap-2">
+            <div className="mb-4 flex gap-2">
               <select
                 value={selectedState}
                 onChange={(e) => setSelectedState(e.target.value)}
@@ -212,13 +259,12 @@ export default function Dashboard() {
 
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-semibold text-gray-900 text-sm">
-                {filteredTickets.length} ticket
-                {filteredTickets.length !== 1 ? "s" : ""}
+                {totalTickets} ticket{totalTickets !== 1 ? "s" : ""}
                 {selectedState && ` in ${INDIA_STATES[selectedState]?.name}`}
               </h2>
             </div>
 
-            {filteredTickets.length === 0 ? (
+            {tickets.length === 0 ? (
               <div className="bg-white rounded-2xl border p-12 text-center">
                 <div className="text-4xl mb-3">📋</div>
                 <p className="text-gray-500 text-sm">No tickets found.</p>
@@ -232,7 +278,7 @@ export default function Dashboard() {
             ) : (
               <>
                 <div className="space-y-3">
-                  {paginatedTickets.map((ticket) => (
+                  {tickets.map((ticket) => (
                     <TicketCard
                       key={ticket.id}
                       ticket={ticket}
