@@ -114,3 +114,9 @@ CREATE TRIGGER on_upvote_change
 -- SEED ADMIN USER (run after creating admin in Auth)
 -- ============================================
 UPDATE public.profiles SET role = 'admin' WHERE email = 'amishpratapsingh13@gmail.com';
+
+How did i get Indian map json, got a good constituency map, got mapshaper
+
+mapshaper public/maps/india_01.json \
+  -clean   -dissolve st_name   -simplify 10%  \
+   -o public/maps/india_states.json

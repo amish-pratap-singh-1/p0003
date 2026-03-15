@@ -22,7 +22,6 @@ export default function IndiaStateMap({ data }: Props) {
   const options: Highcharts.Options = {
     chart: {
       map: mapData,
-      height: 1000,
     },
 
     title: {
@@ -70,15 +69,38 @@ export default function IndiaStateMap({ data }: Props) {
         },
       },
     ],
+    responsive: {
+      rules: [
+        {
+          condition: {
+            maxWidth: 640, // mobile
+          },
+          chartOptions: {
+            series: [
+              {
+                type: "map",
+                dataLabels: {
+                  style: {
+                    fontSize: "7px",
+                  },
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
   };
 
   return (
     <>
-      <HighchartsReact
-        highcharts={Highcharts}
-        constructorType="mapChart"
-        options={options}
-      />
+      <div className="grid  h-125 w-full sm:h-200 md:h-250 lg:h-350">
+        <HighchartsReact
+          highcharts={Highcharts}
+          constructorType="mapChart"
+          options={options}
+        />
+      </div>
     </>
   );
 }
