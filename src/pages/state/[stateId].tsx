@@ -79,14 +79,12 @@ export default function StatePage() {
       name,
       count: tickets.filter((t) => t.constituency === name).length,
     })) || [];
-  console.log(constituencyData);
   const filteredTickets = tickets.filter((t) => {
     const cMatch =
       !selectedConstituency || t.constituency === selectedConstituency;
     const sMatch = statusFilter === "all" || t.status === statusFilter;
     return cMatch && sMatch;
   });
-  console.log(constituencyData, "--hello");
   if (loading)
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">

@@ -25,7 +25,6 @@ export default function IndiaConstMap({ data, stateName }: Props) {
   }, [stateName]);
 
   if (!mapData) return <div>Loading...</div>;
-  console.log(mapData);
 
   const options: Highcharts.Options = {
     chart: {
