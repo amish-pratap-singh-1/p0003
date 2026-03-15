@@ -94,13 +94,11 @@ export default function IndiaStateMap({ data }: Props) {
 
   return (
     <>
-      <div className="grid  h-125 w-full sm:h-200 md:h-250 lg:h-350">
-        <HighchartsReact
-          highcharts={Highcharts}
-          constructorType="mapChart"
-          options={options}
-        />
-      </div>
+      <HighchartsReact
+        highcharts={Highcharts}
+        constructorType="mapChart"
+        options={options}
+      />
     </>
   );
 }

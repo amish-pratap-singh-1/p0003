@@ -4,21 +4,12 @@ import { Profile, supabase } from "@/libs/supabaseclient";
 import Navbar from "@/components/ Navbar";
 import IndiaStateMap from "@/components/IndiaStateMap";
 import Link from "next/link";
-import { INDIA_STATES } from "@/data/india";
+import { convertStateData } from "@/data/india";
 
 interface StateCount {
   stateId: string;
   count: number;
 }
-
-const convertStateData = (
-  input: { stateId: string; count: number }[],
-): { st_name: string; value: number }[] => {
-  return input.map((item) => ({
-    st_name: INDIA_STATES[item.stateId]?.name || item.stateId,
-    value: item.count,
-  }));
-};
 
 export default function Home() {
   const router = useRouter();
@@ -144,7 +135,9 @@ export default function Home() {
           <p className="text-xs text-gray-400 mb-6">
             Click on a state to see constituency-level data
           </p>
-          <IndiaStateMap data={formattedData} />
+          <div className="grid  h-125 w-full sm:h-200 md:h-250 lg:h-350">
+            <IndiaStateMap data={formattedData} />
+          </div>
         </div>
       </main>
     </div>

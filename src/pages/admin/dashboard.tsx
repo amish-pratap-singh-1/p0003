@@ -5,7 +5,8 @@ import IndiaMap from "../../components/IndiaMap";
 import TicketCard from "../../components/TicketCard";
 import { Profile, supabase, Ticket } from "@/libs/supabaseclient";
 import Navbar from "@/components/ Navbar";
-import { INDIA_STATES } from "@/data/india";
+import { convertStateData, INDIA_STATES } from "@/data/india";
+import IndiaStateMap from "@/components/IndiaStateMap";
 
 interface StateCount {
   stateId: string;
@@ -87,6 +88,8 @@ export default function AdminDashboard() {
       </div>
     );
 
+  const formattedData = convertStateData(stateCounts);
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar profile={profile} />
@@ -148,17 +151,14 @@ export default function AdminDashboard() {
 
         <div className="flex gap-6">
           {/* Left: Map */}
-          <div className="hidden lg:block w-72 flex-shrink-0">
+          <div className="hidden lg:block w-110 flex-shrink-0">
             <div className="bg-white rounded-2xl border p-4 sticky top-20">
               <h2 className="font-semibold text-gray-900 text-sm mb-3">
                 Issue Heatmap
               </h2>
-              <IndiaMap
-                stateData={stateCounts}
-                onStateClick={(id) =>
-                  setSelectedState((prev) => (prev === id ? "" : id))
-                }
-              />
+              <div className="grid h-120">
+                <IndiaStateMap data={formattedData} />
+              </div>
               {selectedState && (
                 <div className="mt-3">
                   <div className="flex items-center justify-between">

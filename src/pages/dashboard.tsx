@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/router";
-import { INDIA_STATES } from "../data/india";
-import IndiaMap from "../components/IndiaMap";
+import { convertStateData, INDIA_STATES } from "../data/india";
 import TicketCard from "../components/TicketCard";
 import CreateTicketModal from "../components/CreateTicketModal";
 import { Profile, supabase, Ticket } from "@/libs/supabaseclient";
 import Navbar from "@/components/ Navbar";
+import IndiaStateMap from "@/components/IndiaStateMap";
 
 interface StateCount {
   stateId: string;
@@ -22,7 +22,6 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<"map" | "list">("map");
 
   const fetchTickets = useCallback(async () => {
     const { data } = await supabase
@@ -102,6 +101,7 @@ export default function Dashboard() {
         </div>
       </div>
     );
+  const formattedData = convertStateData(stateCounts);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -165,51 +165,23 @@ export default function Dashboard() {
           ))}
         </div>
 
-        <div className="flex gap-6">
-          {/* Left: Map or controls */}
-          <div className="hidden lg:block w-72 flex-shrink-0">
+        <div className="flex flex-col lg:flex-row  gap-6">
+          <div className=" w-full  lg:w-110 flex-shrink-0">
             <div className="bg-white rounded-2xl border p-4 sticky top-20">
               <h2 className="font-semibold text-gray-900 text-sm mb-3">
-                Filter by State
+                Click a state to see its tickets
               </h2>
-              <IndiaMap
-                stateData={stateCounts}
-                onStateClick={(id) =>
-                  setSelectedState((prev) => (prev === id ? "" : id))
-                }
-              />
-              {selectedState && (
-                <div className="mt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-blue-700">
-                      {INDIA_STATES[selectedState]?.name}
-                    </span>
-                    <button
-                      onClick={() => setSelectedState("")}
-                      className="text-xs text-gray-400 hover:text-gray-600"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => router.push(`/state/${selectedState}`)}
-                    className="mt-2 w-full text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 py-1.5 rounded-lg transition-colors"
-                  >
-                    View state page →
-                  </button>
-                </div>
-              )}
+              <div className="grid h-120">
+                <IndiaStateMap data={formattedData} />
+              </div>
             </div>
           </div>
-
-          {/* Right: Tickets */}
           <div className="flex-1 min-w-0">
-            {/* Mobile state selector */}
-            <div className="lg:hidden mb-4 flex gap-2">
+            <div className=" mb-4 flex gap-2">
               <select
                 value={selectedState}
                 onChange={(e) => setSelectedState(e.target.value)}
-                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                className="flex-1 border border-gray-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
                 <option value="">All States</option>
                 {Object.entries(INDIA_STATES)

@@ -700,3 +700,12 @@ export const STATE_COORDINATES: Record<string, [number, number]> = {
 export const STATE_NAME_TO_ID = Object.fromEntries(
   Object.entries(INDIA_STATES).map(([id, v]) => [v.name, id]),
 );
+
+export const convertStateData = (
+  input: { stateId: string; count: number }[],
+): { st_name: string; value: number }[] => {
+  return input.map((item) => ({
+    st_name: INDIA_STATES[item.stateId]?.name || item.stateId,
+    value: item.count,
+  }));
+};
