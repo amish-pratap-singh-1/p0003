@@ -696,3 +696,7 @@ export const STATE_COORDINATES: Record<string, [number, number]> = {
   DL: [28.7041, 77.1025],
   JK: [33.7782, 76.5762],
 };
+
+export const STATE_NAME_TO_ID = Object.fromEntries(
+  Object.entries(INDIA_STATES).map(([id, v]) => [v.name, id]),
+);

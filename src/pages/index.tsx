@@ -2,13 +2,23 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { Profile, supabase } from "@/libs/supabaseclient";
 import Navbar from "@/components/ Navbar";
-import IndiaMap from "@/components/IndiaMap";
 import IndiaStateMap from "@/components/IndiaStateMap";
+import Link from "next/link";
+import { INDIA_STATES } from "@/data/india";
 
 interface StateCount {
   stateId: string;
   count: number;
 }
+
+const convertStateData = (
+  input: { stateId: string; count: number }[],
+): { st_name: string; value: number }[] => {
+  return input.map((item) => ({
+    st_name: INDIA_STATES[item.stateId]?.name || item.stateId,
+    value: item.count,
+  }));
+};
 
 export default function Home() {
   const router = useRouter();
@@ -33,6 +43,7 @@ export default function Home() {
       Object.entries(counts).map(([stateId, count]) => ({ stateId, count })),
     );
   };
+
   useEffect(() => {
     const init = async () => {
       const {
@@ -63,6 +74,7 @@ export default function Home() {
         <div className="text-gray-400 text-sm animate-pulse">Loading...</div>
       </div>
     );
+  const formattedData = convertStateData(stateCounts);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -82,18 +94,18 @@ export default function Home() {
             and upvote tickets.
           </p>
           <div className="flex gap-3 justify-center mt-6">
-            <a
+            <Link
               href="/login"
               className="bg-orange-500 hover:bg-orange-600 text-white font-medium px-5 py-2.5 rounded-lg text-sm transition-colors"
             >
               Get Started
-            </a>
-            <a
+            </Link>
+            <Link
               href="/login"
               className="bg-white hover:bg-gray-50 text-gray-700 font-medium px-5 py-2.5 rounded-lg text-sm border border-gray-200 transition-colors"
             >
               Browse Tickets
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -132,16 +144,7 @@ export default function Home() {
           <p className="text-xs text-gray-400 mb-6">
             Click on a state to see constituency-level data
           </p>
-          <div className="flex justify-center">
-            <IndiaMap stateData={stateCounts} />
-          </div>
-          <IndiaStateMap
-            data={[
-              { st_name: "Maharashtra", value: 500 },
-              { st_name: "Gujarat", value: 300 },
-              { st_name: "Rajasthan", value: 450 },
-            ]}
-          />
+          <IndiaStateMap data={formattedData} />
         </div>
       </main>
     </div>
