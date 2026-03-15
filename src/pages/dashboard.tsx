@@ -31,9 +31,10 @@ export default function Dashboard() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [ticketsLoading, setTicketsLoading] = useState(false);
+  const [statsLoading, setStatsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Fetch per-state ticket counts for the map (always global, no filters)
   const fetchStateCounts = useCallback(async () => {
     const { data } = await supabase.from("tickets").select("state_id");
     if (data) {
@@ -47,38 +48,51 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Fetch status summary counts (respects state filter but not status filter)
   const fetchStatusTotals = useCallback(async (stateId: string) => {
-    let query = supabase.from("tickets").select("status");
-    if (stateId) query = query.eq("state_id", stateId);
-    const { data } = await query;
-    if (data) {
-      const totals = { all: data.length, open: 0, in_progress: 0, resolved: 0 };
-      data.forEach((t: { status: string }) => {
-        if (t.status in totals) totals[t.status as keyof typeof totals]++;
-      });
-      setStatusTotals(totals);
+    setStatsLoading(true);
+    try {
+      let query = supabase.from("tickets").select("status");
+      if (stateId) query = query.eq("state_id", stateId);
+      const { data } = await query;
+      if (data) {
+        const totals = {
+          all: data.length,
+          open: 0,
+          in_progress: 0,
+          resolved: 0,
+        };
+        data.forEach((t: { status: string }) => {
+          if (t.status in totals) totals[t.status as keyof typeof totals]++;
+        });
+        setStatusTotals(totals);
+      }
+    } finally {
+      setStatsLoading(false);
     }
   }, []);
 
-  // Fetch paginated + filtered tickets from DB
   const fetchTickets = useCallback(
     async (page: number, stateId: string, status: string) => {
-      const from = (page - 1) * ITEMS_PER_PAGE;
-      const to = from + ITEMS_PER_PAGE - 1;
+      setTicketsLoading(true);
+      try {
+        const from = (page - 1) * ITEMS_PER_PAGE;
+        const to = from + ITEMS_PER_PAGE - 1;
 
-      let query = supabase
-        .from("tickets")
-        .select("*", { count: "exact" })
-        .order("upvotes", { ascending: false })
-        .range(from, to);
+        let query = supabase
+          .from("tickets")
+          .select("*", { count: "exact" })
+          .order("upvotes", { ascending: false })
+          .range(from, to);
 
-      if (stateId) query = query.eq("state_id", stateId);
-      if (status !== "all") query = query.eq("status", status);
+        if (stateId) query = query.eq("state_id", stateId);
+        if (status !== "all") query = query.eq("status", status);
 
-      const { data, count } = await query;
-      if (data) setTickets(data);
-      if (count !== null) setTotalTickets(count);
+        const { data, count } = await query;
+        if (data) setTickets(data);
+        if (count !== null) setTotalTickets(count);
+      } finally {
+        setTicketsLoading(false);
+      }
     },
     [],
   );
@@ -91,7 +105,6 @@ export default function Dashboard() {
     if (data) setUserUpvotes(new Set(data.map((u: any) => u.ticket_id)));
   }, []);
 
-  // Initial auth + data load
   useEffect(() => {
     const init = async () => {
       const {
@@ -128,14 +141,12 @@ export default function Dashboard() {
     init();
   }, []);
 
-  // Re-fetch when filters or page change
   useEffect(() => {
     if (!loading) {
       fetchTickets(currentPage, selectedState, statusFilter);
     }
   }, [currentPage, selectedState, statusFilter]);
 
-  // Reset to page 1 and refresh status totals when state/status filter changes
   useEffect(() => {
     if (!loading) {
       setCurrentPage(1);
@@ -221,7 +232,11 @@ export default function Dashboard() {
                 statusFilter === key ? "ring-2 ring-offset-1 ring-current" : ""
               }`}
             >
-              <div className="text-xl font-bold">{statusTotals[key]}</div>
+              {statsLoading ? (
+                <div className="h-7 w-10 rounded bg-current opacity-10 animate-pulse" />
+              ) : (
+                <div className="text-xl h-7 font-bold">{statusTotals[key]}</div>
+              )}
               <div className="text-xs opacity-70">{label}</div>
             </button>
           ))}
@@ -258,13 +273,74 @@ export default function Dashboard() {
             </div>
 
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-900 text-sm">
-                {totalTickets} ticket{totalTickets !== 1 ? "s" : ""}
-                {selectedState && ` in ${INDIA_STATES[selectedState]?.name}`}
+              <h2 className="font-semibold text-gray-900 text-sm flex items-center gap-2">
+                {ticketsLoading ? (
+                  <>
+                    <svg
+                      className="animate-spin h-3.5 w-3.5 text-orange-500"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                      />
+                    </svg>
+                    <span className="text-gray-400">Loading tickets...</span>
+                  </>
+                ) : (
+                  <span>
+                    {totalTickets} ticket{totalTickets !== 1 ? "s" : ""}
+                    {statusFilter !== "all" && (
+                      <span className="text-gray-400 font-normal">
+                        {" "}
+                        ·{" "}
+                        {statusFilter === "in_progress"
+                          ? "in progress"
+                          : statusFilter}
+                      </span>
+                    )}
+                    {selectedState && (
+                      <span className="text-gray-400 font-normal">
+                        {" "}
+                        in {INDIA_STATES[selectedState]?.name}
+                      </span>
+                    )}
+                  </span>
+                )}
               </h2>
             </div>
 
-            {tickets.length === 0 ? (
+            {ticketsLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="bg-white rounded-2xl border p-4 animate-pulse"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 space-y-2">
+                        <div className="h-4 bg-gray-200 rounded w-3/4" />
+                        <div className="h-3 bg-gray-100 rounded w-1/2" />
+                      </div>
+                      <div className="h-6 w-16 bg-gray-100 rounded-full" />
+                    </div>
+                    <div className="mt-3 h-3 bg-gray-100 rounded w-full" />
+                    <div className="mt-1.5 h-3 bg-gray-100 rounded w-5/6" />
+                  </div>
+                ))}
+              </div>
+            ) : tickets.length === 0 ? (
               <div className="bg-white rounded-2xl border p-12 text-center">
                 <div className="text-4xl mb-3">📋</div>
                 <p className="text-gray-500 text-sm">No tickets found.</p>
@@ -272,7 +348,7 @@ export default function Dashboard() {
                   onClick={() => setShowModal(true)}
                   className="mt-4 text-sm text-orange-600 hover:underline"
                 >
-                  Create the first one →
+                  Create one →
                 </button>
               </div>
             ) : (
