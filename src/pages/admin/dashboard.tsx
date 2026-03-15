@@ -264,37 +264,15 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        <div className="flex gap-6">
-          {/* Left: Map */}
-          <div className="hidden lg:block w-110 flex-shrink-0">
+        <div className="flex flex-col lg:flex-row gap-6">
+          <div className="w-full lg:w-110 flex-shrink-0">
             <div className="bg-white rounded-2xl border p-4 sticky top-20">
               <h2 className="font-semibold text-gray-900 text-sm mb-3">
-                Issue Heatmap
+                Click a state to see its tickets
               </h2>
               <div className="grid h-120">
                 <IndiaStateMap data={formattedData} />
               </div>
-              {selectedState && (
-                <div className="mt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-purple-700">
-                      {INDIA_STATES[selectedState]?.name}
-                    </span>
-                    <button
-                      onClick={handleClearState}
-                      className="text-xs text-gray-400 hover:text-gray-600"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => router.push(`/state/${selectedState}`)}
-                    className="mt-2 w-full text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 py-1.5 rounded-lg"
-                  >
-                    View state page →
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 
