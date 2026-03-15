@@ -16,6 +16,9 @@ export type Ticket = {
   created_by: string;
   created_at: string;
   user_email?: string;
+  resolved_by?: string | null;
+  resolve_note?: string | null;
+  resolved_at?: string | null;
 };
 
 export type Profile = {

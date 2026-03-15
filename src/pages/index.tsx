@@ -20,19 +20,29 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   const fetchStats = async () => {
-    const { data } = await supabase.from("tickets").select("state_id, status");
-    if (!data) return;
+    // Single count query for totals — no row data transferred
+    const [{ count: total }, { count: resolved }, { data: stateData }] =
+      await Promise.all([
+        supabase.from("tickets").select("*", { count: "exact", head: true }),
+        supabase
+          .from("tickets")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "resolved"),
+        supabase.from("tickets").select("state_id"),
+      ]);
 
-    setTotalTickets(data.length);
-    setResolvedTickets(data.filter((t) => t.status === "resolved").length);
+    if (total !== null) setTotalTickets(total);
+    if (resolved !== null) setResolvedTickets(resolved);
 
-    const counts: Record<string, number> = {};
-    data.forEach((t) => {
-      counts[t.state_id] = (counts[t.state_id] || 0) + 1;
-    });
-    setStateCounts(
-      Object.entries(counts).map(([stateId, count]) => ({ stateId, count })),
-    );
+    if (stateData) {
+      const counts: Record<string, number> = {};
+      stateData.forEach((t) => {
+        counts[t.state_id] = (counts[t.state_id] || 0) + 1;
+      });
+      setStateCounts(
+        Object.entries(counts).map(([stateId, count]) => ({ stateId, count })),
+      );
+    }
   };
 
   useEffect(() => {
@@ -101,7 +111,7 @@ export default function Home() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4 mb-10 max-w-lg mx-auto">
+        <div className="grid grid-cols-2 gap-4 mb-10 max-w-lg mx-auto">
           {[
             {
               label: "Total Tickets",
@@ -112,11 +122,6 @@ export default function Home() {
               label: "Resolved",
               value: resolvedTickets,
               color: "text-green-600",
-            },
-            {
-              label: "States Active",
-              value: stateCounts.length,
-              color: "text-orange-600",
             },
           ].map(({ label, value, color }) => (
             <div
