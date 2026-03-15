@@ -136,7 +136,7 @@ export default function StatePage() {
       await Promise.all([
         fetchTickets(1, "", "all"),
         fetchConstituencyCounts(),
-        fetchStatusTotals(""),
+        fetchStatusTotals(),
       ]);
       setLoading(false);
     };
@@ -154,7 +154,7 @@ export default function StatePage() {
   useEffect(() => {
     if (!loading) {
       setCurrentPage(1);
-      fetchStatusTotals(selectedConstituency);
+      fetchStatusTotals();
     }
   }, [selectedConstituency, statusFilter]);
 
@@ -165,7 +165,7 @@ export default function StatePage() {
   const handleRefresh = () => {
     fetchTickets(currentPage, selectedConstituency, statusFilter);
     fetchConstituencyCounts();
-    fetchStatusTotals(selectedConstituency);
+    fetchStatusTotals();
     if (profile) fetchUpvotes(profile.id);
   };
 
