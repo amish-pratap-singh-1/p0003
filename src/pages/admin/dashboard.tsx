@@ -35,10 +35,18 @@ export default function AdminDashboard() {
   const [statsLoading, setStatsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Debounce — only sets debouncedSearch, fetch is triggered in the effect below
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchQuery), 400);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  // When debounced search settles, reset to page 1 and fetch with current filters
+  useEffect(() => {
+    if (loading) return;
+    setCurrentPage(1);
+    fetchTickets(1, selectedState, statusFilter, debouncedSearch);
+  }, [debouncedSearch]);
 
   const fetchStateCounts = useCallback(async () => {
     const { data } = await supabase.from("tickets").select("state_id");
@@ -112,6 +120,7 @@ export default function AdminDashboard() {
     [],
   );
 
+  // Initial load only — no filter/page effects
   useEffect(() => {
     const init = async () => {
       const {
@@ -142,15 +151,35 @@ export default function AdminDashboard() {
     init();
   }, []);
 
-  useEffect(() => {
-    if (!loading) {
-      fetchTickets(currentPage, selectedState, statusFilter, debouncedSearch);
-    }
-  }, [currentPage, selectedState, statusFilter, debouncedSearch]);
+  // ── Explicit handlers — pass values directly, never read stale state ──
 
-  useEffect(() => {
-    if (!loading) setCurrentPage(1);
-  }, [selectedState, statusFilter, debouncedSearch]);
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    fetchTickets(newPage, selectedState, statusFilter, debouncedSearch);
+  };
+
+  const handleStatusFilter = (
+    s: "all" | "open" | "in_progress" | "resolved",
+  ) => {
+    setStatusFilter(s);
+    setCurrentPage(1);
+    fetchTickets(1, selectedState, s, debouncedSearch);
+    fetchStatusTotals();
+  };
+
+  const handleStateChange = (stateId: string) => {
+    setSelectedState(stateId);
+    setCurrentPage(1);
+    fetchTickets(1, stateId, statusFilter, debouncedSearch);
+    fetchStatusTotals();
+  };
+
+  const handleClearState = () => {
+    setSelectedState("");
+    setCurrentPage(1);
+    fetchTickets(1, "", statusFilter, debouncedSearch);
+    fetchStatusTotals();
+  };
 
   const handleRefresh = () => {
     fetchTickets(currentPage, selectedState, statusFilter, debouncedSearch);
@@ -218,7 +247,7 @@ export default function AdminDashboard() {
           ).map(({ label, key, color }) => (
             <button
               key={key}
-              onClick={() => setStatusFilter(key)}
+              onClick={() => handleStatusFilter(key)}
               className={`rounded-xl p-3 text-left transition-all ${color} ${
                 statusFilter === key
                   ? "ring-2 ring-offset-1 ring-current"
@@ -252,7 +281,7 @@ export default function AdminDashboard() {
                       {INDIA_STATES[selectedState]?.name}
                     </span>
                     <button
-                      onClick={() => setSelectedState("")}
+                      onClick={handleClearState}
                       className="text-xs text-gray-400 hover:text-gray-600"
                     >
                       Clear
@@ -304,7 +333,7 @@ export default function AdminDashboard() {
               </div>
               <select
                 value={selectedState}
-                onChange={(e) => setSelectedState(e.target.value)}
+                onChange={(e) => handleStateChange(e.target.value)}
                 className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
               >
                 <option value="">All States</option>
@@ -401,7 +430,7 @@ export default function AdminDashboard() {
               </div>
             ) : (
               <>
-                <div className="space-y-3">
+                <div className="flex flex-col gap-3">
                   {tickets.map((ticket) => (
                     <TicketCard
                       key={ticket.id}
@@ -417,7 +446,7 @@ export default function AdminDashboard() {
                   <div className="flex justify-center items-center gap-2 mt-6">
                     <button
                       onClick={() =>
-                        setCurrentPage((prev) => Math.max(prev - 1, 1))
+                        handlePageChange(Math.max(currentPage - 1, 1))
                       }
                       disabled={currentPage === 1}
                       className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
@@ -429,7 +458,7 @@ export default function AdminDashboard() {
                     </span>
                     <button
                       onClick={() =>
-                        setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                        handlePageChange(Math.min(currentPage + 1, totalPages))
                       }
                       disabled={currentPage === totalPages}
                       className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"

@@ -105,6 +105,7 @@ export default function Dashboard() {
     if (data) setUserUpvotes(new Set(data.map((u: any) => u.ticket_id)));
   }, []);
 
+  // Initial load only — no filter/page effects
   useEffect(() => {
     const init = async () => {
       const {
@@ -141,18 +142,28 @@ export default function Dashboard() {
     init();
   }, []);
 
-  useEffect(() => {
-    if (!loading) {
-      fetchTickets(currentPage, selectedState, statusFilter);
-    }
-  }, [currentPage, selectedState, statusFilter]);
+  // ── Explicit handlers — pass values directly, never read stale state ──
 
-  useEffect(() => {
-    if (!loading) {
-      setCurrentPage(1);
-      fetchStatusTotals(selectedState);
-    }
-  }, [selectedState, statusFilter]);
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    fetchTickets(newPage, selectedState, statusFilter);
+  };
+
+  const handleStatusFilter = (
+    s: "all" | "open" | "in_progress" | "resolved",
+  ) => {
+    setStatusFilter(s);
+    setCurrentPage(1);
+    fetchTickets(1, selectedState, s);
+    fetchStatusTotals(selectedState);
+  };
+
+  const handleStateChange = (stateId: string) => {
+    setSelectedState(stateId);
+    setCurrentPage(1);
+    fetchTickets(1, stateId, statusFilter);
+    fetchStatusTotals(stateId);
+  };
 
   const handleRefresh = () => {
     if (profile) {
@@ -227,7 +238,7 @@ export default function Dashboard() {
           ).map(({ label, key, color }) => (
             <button
               key={key}
-              onClick={() => setStatusFilter(key)}
+              onClick={() => handleStatusFilter(key)}
               className={`rounded-xl border p-3 text-left transition-all ${color} ${
                 statusFilter === key ? "ring-2 ring-offset-1 ring-current" : ""
               }`}
@@ -258,7 +269,7 @@ export default function Dashboard() {
             <div className="mb-4 flex gap-2">
               <select
                 value={selectedState}
-                onChange={(e) => setSelectedState(e.target.value)}
+                onChange={(e) => handleStateChange(e.target.value)}
                 className="flex-1 border border-gray-400 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               >
                 <option value="">All States</option>
@@ -353,7 +364,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <>
-                <div className="space-y-3">
+                <div className="flex flex-col gap-3">
                   {tickets.map((ticket) => (
                     <TicketCard
                       key={ticket.id}
@@ -369,7 +380,7 @@ export default function Dashboard() {
                   <div className="flex justify-center items-center gap-2 mt-4">
                     <button
                       onClick={() =>
-                        setCurrentPage((prev) => Math.max(prev - 1, 1))
+                        handlePageChange(Math.max(currentPage - 1, 1))
                       }
                       disabled={currentPage === 1}
                       className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
@@ -381,7 +392,7 @@ export default function Dashboard() {
                     </span>
                     <button
                       onClick={() =>
-                        setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                        handlePageChange(Math.min(currentPage + 1, totalPages))
                       }
                       disabled={currentPage === totalPages}
                       className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"

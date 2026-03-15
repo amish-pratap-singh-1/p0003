@@ -62,7 +62,7 @@ export default function StatePage() {
     }
   }, [stateId, stateInfo]);
 
-  // Fetch status totals — respects constituency filter but not status filter
+  // Fetch status totals — always global within the state
   const fetchStatusTotals = useCallback(async () => {
     if (!stateId) return;
     const { data } = await supabase
@@ -115,7 +115,7 @@ export default function StatePage() {
     if (data) setUserUpvotes(new Set(data.map((u: any) => u.ticket_id)));
   }, []);
 
-  // Initial load
+  // Initial load only — no filter/page effects
   useEffect(() => {
     if (!stateId) return;
     const init = async () => {
@@ -143,23 +143,28 @@ export default function StatePage() {
     init();
   }, [stateId]);
 
-  // Re-fetch tickets when filters or page change
-  useEffect(() => {
-    if (!loading) {
-      fetchTickets(currentPage, selectedConstituency, statusFilter);
-    }
-  }, [currentPage, selectedConstituency, statusFilter]);
+  // ── Explicit handlers — pass values directly, never read stale state ──
 
-  // Reset page + refresh totals when filters change
-  useEffect(() => {
-    if (!loading) {
-      setCurrentPage(1);
-      fetchStatusTotals();
-    }
-  }, [selectedConstituency, statusFilter]);
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    fetchTickets(newPage, selectedConstituency, statusFilter);
+  };
+
+  const handleStatusFilter = (
+    s: "all" | "open" | "in_progress" | "resolved",
+  ) => {
+    setStatusFilter(s);
+    setCurrentPage(1);
+    fetchTickets(1, selectedConstituency, s);
+    fetchStatusTotals();
+  };
 
   const handleConstituencySelect = (name: string) => {
-    setSelectedConstituency((prev) => (prev === name ? "" : name));
+    const next = selectedConstituency === name ? "" : name;
+    setSelectedConstituency(next);
+    setCurrentPage(1);
+    fetchTickets(1, next, statusFilter);
+    fetchStatusTotals();
   };
 
   const handleRefresh = () => {
@@ -300,7 +305,9 @@ export default function StatePage() {
                 <span className="flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full border border-blue-100">
                   {selectedConstituency}
                   <button
-                    onClick={() => setSelectedConstituency("")}
+                    onClick={() =>
+                      handleConstituencySelect(selectedConstituency)
+                    }
                     className="ml-1 hover:text-blue-900 cursor-pointer"
                   >
                     ✕
@@ -315,7 +322,7 @@ export default function StatePage() {
                 (s) => (
                   <button
                     key={s}
-                    onClick={() => setStatusFilter(s)}
+                    onClick={() => handleStatusFilter(s)}
                     className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
                       statusFilter === s
                         ? "bg-gray-800 text-white border-gray-800"
@@ -360,7 +367,7 @@ export default function StatePage() {
             </div>
           ) : (
             <>
-              <div className="space-y-3">
+              <div className="flex flex-col gap-3">
                 {tickets.map((ticket) => (
                   <TicketCard
                     key={ticket.id}
@@ -376,7 +383,7 @@ export default function StatePage() {
                 <div className="flex justify-center items-center gap-2 mt-6">
                   <button
                     onClick={() =>
-                      setCurrentPage((prev) => Math.max(prev - 1, 1))
+                      handlePageChange(Math.max(currentPage - 1, 1))
                     }
                     disabled={currentPage === 1}
                     className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
@@ -388,7 +395,7 @@ export default function StatePage() {
                   </span>
                   <button
                     onClick={() =>
-                      setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                      handlePageChange(Math.min(currentPage + 1, totalPages))
                     }
                     disabled={currentPage === totalPages}
                     className="px-3 py-1 rounded-lg border text-sm disabled:opacity-50"
